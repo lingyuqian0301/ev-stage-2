@@ -12,21 +12,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, Battery, Clock, Users } from "lucide-react"
-import { fundProject } from "@/lib/blockchain"
+import { fundProject, voteRequest, finalizeRequest } from "@/lib/blockchain"
 import ConnectWallet from "@/components/connect-wallet"
 import { useAccount } from "wagmi"
 
 export default function ProjectDetailPage() {
   const { id } = useParams()
-  const { isConnected } = useAccount()
+  const { isConnected, address } = useAccount()
   const [fundAmount, setFundAmount] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [userContribution, setUserContribution] = useState(0)
 
   // Mock project data - in a real app, this would be fetched based on the ID
   const project = {
     id: id as string,
     title: "SolarDrive EV",
+    owner: "0xOwnerAddress", // project owner address for admin actions
     description: "Solar-powered electric vehicle with 400 mile range",
     longDescription:
       "The SolarDrive EV represents the next generation of sustainable transportation. Featuring integrated solar panels on the roof, hood, and trunk, this vehicle can generate up to 25 miles of range per day from solar power alone. With a high-capacity 120kWh battery pack, the SolarDrive achieves an impressive 400-mile range on a single charge. The vehicle also features bidirectional charging capabilities, allowing it to power homes during outages or sell energy back to the grid during peak hours.",
@@ -64,6 +66,32 @@ export default function ProjectDetailPage() {
     },
   }
 
+  // Mock voting requests data; in production, fetch this from your backend/blockchain.
+  const [votingRequests, setVotingRequests] = useState([
+    {
+      id: "1",
+      description: "Purchase EV charging equipment",
+      recipient: "0xABC123",
+      amount: 0.000000000000000000000000000000000000000000000000000000000000000000002,
+      votesFor: 84,
+      votesAgainst: 16,
+      totalVotingPower: 100, // Total available voting power (100%)
+      votingDeadline: new Date(Date.now() + 86400 * 1000).toISOString(),
+      executed: false,
+    },
+    {
+      id: "2",
+      description: "Upgrade charging station software",
+      recipient: "0xDEF456",
+      amount: 0.00000000000000000000000000000000000000000000000000000000001,
+      votesFor: 50,
+      votesAgainst: 30,
+      // Voting deadline in the past to simulate an expired vote.
+      votingDeadline: new Date(Date.now() - 86400 * 1000).toISOString(),
+      executed: false,
+    },
+  ])
+
   const handleFund = async () => {
     if (!fundAmount || isNaN(Number(fundAmount)) || Number(fundAmount) <= 0) return
 
@@ -76,6 +104,27 @@ export default function ProjectDetailPage() {
       console.error("Funding error:", error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleVote = async (requestId: string, vote: boolean) => {
+    try {
+      // Call your blockchain vote function (implementation assumed in voteRequest)
+      await voteRequest(requestId, vote)
+      console.log(`Voted on request ${requestId}: ${vote ? "Yes" : "No"}`)
+      // Optionally update the UI based on the vote
+    } catch (error) {
+      console.error("Voting error:", error)
+    }
+  }
+
+  const handleFinalize = async (requestId: string) => {
+    try {
+      await finalizeRequest(requestId)
+      console.log(`Finalized request ${requestId}`)
+      // Optionally update the UI after finalization
+    } catch (error) {
+      console.error("Finalize error:", error)
     }
   }
 
@@ -108,6 +157,7 @@ export default function ProjectDetailPage() {
               <TabsTrigger value="updates">Updates</TabsTrigger>
               <TabsTrigger value="specs">Specifications</TabsTrigger>
               <TabsTrigger value="team">Team</TabsTrigger>
+              <TabsTrigger value="voting">Voting</TabsTrigger>
             </TabsList>
 
             <TabsContent value="about" className="space-y-4">
@@ -166,6 +216,60 @@ export default function ProjectDetailPage() {
                 ))}
               </div>
             </TabsContent>
+
+            <TabsContent value="voting" className="space-y-6">
+              {votingRequests.length === 0 ? (
+                <p>No voting requests available.</p>
+              ) : (
+                votingRequests.map((req) => {
+                  const isExpired = new Date(req.votingDeadline) < new Date()
+                  const votesForPercentage = (req.votesFor / req.totalVotingPower) * 100
+                  const votesAgainstPercentage = (req.votesAgainst / req.totalVotingPower) * 100
+                  
+                  return (
+                    <div key={req.id} className="border p-4 rounded-md space-y-2">
+                      <p className="text-sm text-gray-500">Request ID: {req.id}</p>
+                      <h3 className="font-bold text-lg">{req.description}</h3>
+                      <p>Amount: {req.amount} ETH</p>
+                      <p>Recipient: {req.recipient}</p>
+                      <p>
+                        Voting Deadline: {new Date(req.votingDeadline).toLocaleString()}
+                        {isExpired && " (Expired)"}
+                      </p>
+                      <div className="mt-4">
+                        <div className="flex justify-between mb-1">
+                          <span>Yes: {votesForPercentage.toFixed(1)}%</span>
+                          <span>No: {votesAgainstPercentage.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-green-500"
+                            style={{ width: `${votesForPercentage}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex space-x-4">
+                        <Button variant="outline" onClick={() => handleVote(req.id, true)}>
+                          Vote Yes
+                        </Button>
+                        <Button variant="outline" onClick={() => handleVote(req.id, false)}>
+                          Vote No
+                        </Button>
+                        {address === project.owner && isExpired && !req.executed && (
+                          <Button variant="default" onClick={() => handleFinalize(req.id)}>
+                            Finalize Request
+                          </Button>
+                        )}
+                      </div>
+                      <div className="mt-2">
+                        <p>Votes For: {req.votesFor}</p>
+                        <p>Votes Against: {req.votesAgainst}</p>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -215,7 +319,9 @@ export default function ProjectDetailPage() {
               ) : showSuccess ? (
                 <div className="bg-green-50 p-4 rounded-lg text-center space-y-2">
                   <h3 className="font-bold text-green-700">Thank you for your contribution!</h3>
-                  <p className="text-sm text-green-600">Your transaction has been submitted to the Scroll testnet.</p>
+                  <p className="text-sm text-green-600">
+                    Your transaction has been submitted to the Scroll testnet.
+                  </p>
                   <Button variant="outline" className="mt-2" onClick={() => setShowSuccess(false)}>
                     Fund Again
                   </Button>
@@ -236,8 +342,7 @@ export default function ProjectDetailPage() {
                     {isLoading ? "Processing..." : "Fund This Project"}
                   </Button>
                   <p className="text-xs text-center text-gray-500">
-                    Funds are processed on the Scroll testnet. You'll receive a confirmation once the transaction is
-                    complete.
+                    Funds are processed on the Scroll testnet. You'll receive a confirmation once the transaction is complete.
                   </p>
                 </div>
               )}
@@ -248,4 +353,3 @@ export default function ProjectDetailPage() {
     </div>
   )
 }
-

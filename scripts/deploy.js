@@ -11,6 +11,11 @@ async function main() {
     const contract = await Contract.deploy(/* constructor arguments if any */);
     await contract.waitForDeployment();
 
+    // Voting.sol
+    const VotingContract = await ethers.getContractFactory("Voting");
+    const votingContract = await VotingContract.deploy(contract.address);
+    await votingContract.waitForDeployment();
+
     console.log("Contract deployed to:", await contract.getAddress());
 }
 
