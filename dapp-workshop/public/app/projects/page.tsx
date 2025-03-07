@@ -1,13 +1,32 @@
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import ProjectCard from "@/components/project-card"
-import { Search } from "lucide-react"
+"use client";
+
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ProjectCard from "@/components/project-card";
+import { Search } from "lucide-react";
+import { getProjectDetails, getProjectFunding, getProjectBackers } from "@/lib/blockchain";
+
+// Define the Project type
+type Project = {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  fundingGoal: number;
+  currentFunding: number;
+  daysLeft: number;
+  backers: number;
+};
 
 export default function ProjectsPage() {
-  // Sample projects data
-  const projects = [
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Sample dummy projects
+  const dummyProjects: Project[] = [
     {
       id: "1",
       title: "SolarDrive EV",
@@ -68,7 +87,48 @@ export default function ProjectsPage() {
       daysLeft: 35,
       backers: 780,
     },
-  ]
+  ];
+
+  // Fetch projects from the blockchain
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        // Replace this with an actual contract call to retrieve the total number of projects
+        const projectCount = 3; // e.g., from a function like: const projectCount = await getProjectCount();
+
+        const blockchainProjects: Project[] = [];
+        for (let i = 1; i <= projectCount; i++) {
+          const projectDetails = await getProjectDetails(i);
+          const funding = await getProjectFunding(i);
+          const backers = await getProjectBackers(i);
+
+          blockchainProjects.push({
+            id: i.toString(),
+            title: `Blockchain Project ${i}`,
+            description: "A project funded on the blockchain",
+            image: "/blockchain-placeholder.svg?height=200&width=400",
+            fundingGoal: projectDetails.fundingGoal,
+            currentFunding: funding,
+            daysLeft: 30, // Placeholder for days left
+            backers: backers,
+          });
+        }
+
+        // Combine dummy and blockchain projects
+        setProjects([...dummyProjects, ...blockchainProjects]);
+      } catch (error) {
+        console.error("Error fetching projects:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, []);
+
+  if (loading) {
+    return <div className="container px-4 py-12 md:px-6 md:py-16">Loading projects...</div>;
+  }
 
   return (
     <div className="container px-4 py-12 md:px-6 md:py-16">
@@ -142,6 +202,5 @@ export default function ProjectsPage() {
         <Button variant="outline">Load More Projects</Button>
       </div>
     </div>
-  )
+  );
 }
-
