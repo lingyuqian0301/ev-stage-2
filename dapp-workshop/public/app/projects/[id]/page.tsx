@@ -235,9 +235,7 @@ export default function ProjectDetailPage() {
     setIsLoading(true);
     try {
       if (id.startsWith('dummy-')) {
-        // For dummy projects, we'll still use the blockchain but with ID 1
-        console.log(`Funding dummy project (using chain ID 1) with ${fundAmount} ETH`);
-        await fundProject("1", fundAmount); // Always fund project 1 for dummy projects
+        await fundProject("1", fundAmount);
         setLocalCurrentFunding(prev => prev + (Number(fundAmount) * 1e18));
         setAmount(prev => prev + Number(fundAmount));
         setShowSuccess(true);
@@ -245,15 +243,13 @@ export default function ProjectDetailPage() {
         return;
       }
 
-      // Handle regular chain project funding
       if (!chainProject) {
         console.log("No chain project loaded; cannot fund.");
         return;
       }
 
-      console.log(`Funding #${chainProject.id} with ${fundAmount} ETH`);
       await fundProject(String(chainProject.id), fundAmount);
-      setLocalCurrentFunding(prev => prev + (Number(fundAmount)* 1e18 + amount*2500));
+      setLocalCurrentFunding(prev => prev + (Number(fundAmount) * 1e18));
       setAmount(prev => prev + Number(fundAmount));
       setShowSuccess(true);
       setFundAmount("");
@@ -265,46 +261,73 @@ export default function ProjectDetailPage() {
   };
 
   // Vote weighting logic:
-  // We'll assume each user has a "weight" = total ETH contributed in the dummy "contributors" state
-  // If user votes "yes," we add their weight to votesFor. If "no," we add their weight to votesAgainst.
-  const handleVote = (requestId: string, yes: boolean) => {
+  const handleVote = async (requestId: string, yes: boolean) => {
+    if (!isConnected || !address) {
+      console.log("Wallet not connected");
+      return;
+    }
+
     try {
-      console.log(`(Dummy) Weighted vote on request #${requestId}, yes=${yes}`);
-      // find the request in state
+      console.log(`Voting on request #${requestId}, yes=${yes}`);
+      
+      // Find the user's contribution weight
+      const userWeight = amount; // Use the tracked contribution amount
+
+      // Update voting state
       setVotingRequests((prev) =>
         prev.map((req) => {
           if (req.id === requestId) {
-            // find the user's contribution
-            const user = contributors.find((c) => c.address === address);
-            const userWeight = user ? user.amountFunded : 0; // if not found, weight=0
-
             if (yes) {
               req.votesFor += userWeight;
             } else {
               req.votesAgainst += userWeight;
             }
-            console.log(`User weight: ${userWeight}, new votesFor=${req.votesFor}, votesAgainst=${req.votesAgainst}`);
             return { ...req };
           }
           return req;
         })
       );
+
+      // If it's a dummy project, interact with project 1
+      if (id.startsWith('dummy-')) {
+        // You would call your voting contract method here
+        // await voteOnRequest("1", requestId, yes);
+        console.log(`Dummy vote recorded for project 1, request ${requestId}`);
+      } else {
+        // For real chain projects
+        // await voteOnRequest(chainProject.id, requestId, yes);
+        console.log(`Vote recorded for project ${chainProject?.id}, request ${requestId}`);
+      }
+
     } catch (error) {
-      console.error("Weighted voting error:", error);
+      console.error("Voting error:", error);
     }
   };
 
-  // finalize is just dummy - in real code, you'd call your contract
-  const handleFinalize = (requestId: string) => {
-    console.log(`Dummy finalize request #${requestId}`);
-    setVotingRequests((prev) =>
-      prev.map((req) => {
-        if (req.id === requestId) {
-          return { ...req, executed: true };
-        }
-        return req;
-      })
-    );
+  // Handle vote finalization
+  const handleFinalize = async (requestId: string) => {
+    try {
+      if (id.startsWith('dummy-')) {
+        // Interact with project 1 for dummy projects
+        // await finalizeRequest("1", requestId);
+        console.log(`Finalizing request ${requestId} for project 1`);
+      } else {
+        // await finalizeRequest(chainProject.id, requestId);
+        console.log(`Finalizing request ${requestId} for project ${chainProject?.id}`);
+      }
+
+      // Update local state
+      setVotingRequests((prev) =>
+        prev.map((req) => {
+          if (req.id === requestId) {
+            return { ...req, executed: true };
+          }
+          return req;
+        })
+      );
+    } catch (error) {
+      console.error("Finalization error:", error);
+    }
   };
 
   // Sort the contributors descending by "amountFunded"
@@ -429,8 +452,6 @@ export default function ProjectDetailPage() {
                     <div key={req.id} className="border p-4 rounded-md space-y-2">
                       <p className="text-sm text-gray-500">Request ID: {req.id}</p>
                       <h3 className="font-bold text-lg">{req.description}</h3>
-                      <p>Amount: {req.amount} ETH</p>
-                      <p>Recipient: {req.recipient}</p>
                       <p>
                         Voting Deadline:{" "}
                         {new Date(req.votingDeadline).toLocaleString()}

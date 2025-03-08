@@ -213,8 +213,24 @@ export default function ProjectDetailPage() {
       console.log(`Funding #${chainProject.id} with ${fundAmount} ETH`);
       // In your real code, this calls the contract. 
       await fundProject(String(chainProject.id), fundAmount);
+      // Re-fetch updated data
+      await fetchChainProject();
       setShowSuccess(true);
       setFundAmount("");
+
+      // Update local contributors based on fundAmount
+      setContributors((prev) => {
+        const updated = [...prev];
+        const amountNum = parseFloat(fundAmount);
+        const idx = updated.findIndex((c) => c.address === address);
+        if (idx >= 0) {
+          updated[idx].amountFunded += amountNum;
+        } else {
+          updated.push({ address, amountFunded: amountNum });
+        }
+        return updated;
+      });
+
     } catch (error) {
       console.error("Funding error:", error);
     } finally {
@@ -334,7 +350,7 @@ export default function ProjectDetailPage() {
                   <p className="text-sm text-gray-500">Top Speed</p>
                   <p className="font-medium">{project.specs.topSpeed}</p>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1"></div>
                   <p className="text-sm text-gray-500">Battery Capacity</p>
                   <p className="font-medium">{project.specs.batteryCapacity}</p>
                 </div>
@@ -459,7 +475,7 @@ export default function ProjectDetailPage() {
         <div>
           <Card>
             <CardContent className="p-6 space-y-6">
-              <div className="space-y-2">
+              <div className="space-y-2"></div>
                 <div className="flex justify-between">
                   <span className="font-bold text-2xl">
                     ${(project.currentFunding / 1000).toFixed(1)}k
