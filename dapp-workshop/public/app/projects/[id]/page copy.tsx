@@ -34,7 +34,6 @@ interface ChainProject {
   currentFunding: number;  // ETH float from getProjectFunding
   backers: number;
   active: boolean;
-  endDate: number;        // Add endDate to track project deadline
 }
 
 // For dummy voting requests with weight-based votes
@@ -67,14 +66,8 @@ export default function ProjectDetailPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-    //variable amount to store how much the user has funded
-    const [amount, setAmount] = useState(0);
-
   // store the on-chain project data
   const [chainProject, setChainProject] = useState<ChainProject | null>(null);
-
-  // Add local funding tracking
-  const [localCurrentFunding, setLocalCurrentFunding] = useState<number>(0);
 
   // Dummy "requests" array for demonstration
   const [votingRequests, setVotingRequests] = useState<VotingRequest[]>([
@@ -137,11 +130,10 @@ export default function ProjectDetailPage() {
         setChainProject({
           id: structData.id,
           owner: structData.owner,
-          fundingGoal: structData.fundingGoal,
-          currentFunding: Number(funding) * 1e18,
+          fundingGoal: Number(structData.fundingGoal),
+          currentFunding: funding,
           backers: totalBackers,
           active: structData.active,
-          endDate: structData.endDate,
         });
       } catch (error) {
         console.error("Error fetching project from chain:", error);
@@ -150,26 +142,6 @@ export default function ProjectDetailPage() {
 
     fetchChainProject();
   }, [id]);
-
-  useEffect(() => {
-    if (id.startsWith('dummy-')) {
-      // Set initial funding for dummy project
-      setLocalCurrentFunding(325000 * 1e18); // Initial dummy funding
-    } else if (chainProject) {
-      setLocalCurrentFunding(chainProject.currentFunding);
-    }
-  }, [chainProject, id]);
-
-  // Calculate days left
-  const calculateDaysLeft = () => {
-    if (!chainProject?.endDate) return 0;
-    
-    const now = Math.floor(Date.now() / 1000); // Current time in seconds
-    const timeLeft = chainProject.endDate - now;
-    const daysLeft = Math.max(0, Math.ceil(timeLeft / (24 * 60 * 60)));
-    
-    return daysLeft;
-  };
 
   // Build a "UI project" with fallback
   const project = {
@@ -180,9 +152,9 @@ export default function ProjectDetailPage() {
     longDescription:
       "The SolarDrive EV represents the next generation of sustainable transportation...",
     image: "/product_solardrive3.webp?height=200&width=400",
-    fundingGoal: chainProject ? Number(chainProject.fundingGoal) / 1e18 : 500000,
-    currentFunding: localCurrentFunding / 1e18, // Use local tracking instead
-    daysLeft: calculateDaysLeft(),
+    fundingGoal: chainProject ? chainProject.fundingGoal : 500000,
+    currentFunding: chainProject ? chainProject.currentFunding : 325000,
+    daysLeft: 15, // placeholder
     backers: chainProject ? chainProject.backers : 1240,
     team: [
       {
@@ -231,28 +203,34 @@ export default function ProjectDetailPage() {
     if (!fundAmount || isNaN(Number(fundAmount)) || Number(fundAmount) <= 0) {
       return;
     }
+    if (!chainProject) {
+      console.log("No chain project loaded; cannot fund.");
+      return;
+    }
 
     setIsLoading(true);
     try {
-      if (id.startsWith('dummy-')) {
-        await fundProject("1", fundAmount);
-        setLocalCurrentFunding(prev => prev + (Number(fundAmount) * 1e18));
-        setAmount(prev => prev + Number(fundAmount));
-        setShowSuccess(true);
-        setFundAmount("");
-        return;
-      }
-
-      if (!chainProject) {
-        console.log("No chain project loaded; cannot fund.");
-        return;
-      }
-
+      console.log(`Funding #${chainProject.id} with ${fundAmount} ETH`);
+      // In your real code, this calls the contract. 
       await fundProject(String(chainProject.id), fundAmount);
-      setLocalCurrentFunding(prev => prev + (Number(fundAmount) * 1e18));
-      setAmount(prev => prev + Number(fundAmount));
+      // Re-fetch updated data
+      await fetchChainProject();
       setShowSuccess(true);
       setFundAmount("");
+
+      // Update local contributors based on fundAmount
+      setContributors((prev) => {
+        const updated = [...prev];
+        const amountNum = parseFloat(fundAmount);
+        const idx = updated.findIndex((c) => c.address === address);
+        if (idx >= 0) {
+          updated[idx].amountFunded += amountNum;
+        } else {
+          updated.push({ address, amountFunded: amountNum });
+        }
+        return updated;
+      });
+
     } catch (error) {
       console.error("Funding error:", error);
     } finally {
@@ -261,73 +239,46 @@ export default function ProjectDetailPage() {
   };
 
   // Vote weighting logic:
-  const handleVote = async (requestId: string, yes: boolean) => {
-    if (!isConnected || !address) {
-      console.log("Wallet not connected");
-      return;
-    }
-
+  // We'll assume each user has a "weight" = total ETH contributed in the dummy "contributors" state
+  // If user votes "yes," we add their weight to votesFor. If "no," we add their weight to votesAgainst.
+  const handleVote = (requestId: string, yes: boolean) => {
     try {
-      console.log(`Voting on request #${requestId}, yes=${yes}`);
-      
-      // Find the user's contribution weight
-      const userWeight = amount; // Use the tracked contribution amount
-
-      // Update voting state
+      console.log(`(Dummy) Weighted vote on request #${requestId}, yes=${yes}`);
+      // find the request in state
       setVotingRequests((prev) =>
         prev.map((req) => {
           if (req.id === requestId) {
+            // find the user's contribution
+            const user = contributors.find((c) => c.address === address);
+            const userWeight = user ? user.amountFunded : 0; // if not found, weight=0
+
             if (yes) {
               req.votesFor += userWeight;
             } else {
               req.votesAgainst += userWeight;
             }
+            console.log(`User weight: ${userWeight}, new votesFor=${req.votesFor}, votesAgainst=${req.votesAgainst}`);
             return { ...req };
           }
           return req;
         })
       );
-
-      // If it's a dummy project, interact with project 1
-      if (id.startsWith('dummy-')) {
-        // You would call your voting contract method here
-        // await voteOnRequest("1", requestId, yes);
-        console.log(`Dummy vote recorded for project 1, request ${requestId}`);
-      } else {
-        // For real chain projects
-        // await voteOnRequest(chainProject.id, requestId, yes);
-        console.log(`Vote recorded for project ${chainProject?.id}, request ${requestId}`);
-      }
-
     } catch (error) {
-      console.error("Voting error:", error);
+      console.error("Weighted voting error:", error);
     }
   };
 
-  // Handle vote finalization
-  const handleFinalize = async (requestId: string) => {
-    try {
-      if (id.startsWith('dummy-')) {
-        // Interact with project 1 for dummy projects
-        // await finalizeRequest("1", requestId);
-        console.log(`Finalizing request ${requestId} for project 1`);
-      } else {
-        // await finalizeRequest(chainProject.id, requestId);
-        console.log(`Finalizing request ${requestId} for project ${chainProject?.id}`);
-      }
-
-      // Update local state
-      setVotingRequests((prev) =>
-        prev.map((req) => {
-          if (req.id === requestId) {
-            return { ...req, executed: true };
-          }
-          return req;
-        })
-      );
-    } catch (error) {
-      console.error("Finalization error:", error);
-    }
+  // finalize is just dummy - in real code, you'd call your contract
+  const handleFinalize = (requestId: string) => {
+    console.log(`Dummy finalize request #${requestId}`);
+    setVotingRequests((prev) =>
+      prev.map((req) => {
+        if (req.id === requestId) {
+          return { ...req, executed: true };
+        }
+        return req;
+      })
+    );
   };
 
   // Sort the contributors descending by "amountFunded"
@@ -399,7 +350,7 @@ export default function ProjectDetailPage() {
                   <p className="text-sm text-gray-500">Top Speed</p>
                   <p className="font-medium">{project.specs.topSpeed}</p>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1"></div>
                   <p className="text-sm text-gray-500">Battery Capacity</p>
                   <p className="font-medium">{project.specs.batteryCapacity}</p>
                 </div>
@@ -452,6 +403,8 @@ export default function ProjectDetailPage() {
                     <div key={req.id} className="border p-4 rounded-md space-y-2">
                       <p className="text-sm text-gray-500">Request ID: {req.id}</p>
                       <h3 className="font-bold text-lg">{req.description}</h3>
+                      <p>Amount: {req.amount} ETH</p>
+                      <p>Recipient: {req.recipient}</p>
                       <p>
                         Voting Deadline:{" "}
                         {new Date(req.votingDeadline).toLocaleString()}
@@ -522,10 +475,10 @@ export default function ProjectDetailPage() {
         <div>
           <Card>
             <CardContent className="p-6 space-y-6">
-              <div className="space-y-2">
+              <div className="space-y-2"></div>
                 <div className="flex justify-between">
                   <span className="font-bold text-2xl">
-                    ${(project.currentFunding+amount*2500).toFixed(0)}
+                    ${(project.currentFunding / 1000).toFixed(1)}k
                   </span>
                   <span className="text-gray-500">
                     of ${(project.fundingGoal / 1000).toFixed(0)}k goal
@@ -557,7 +510,7 @@ export default function ProjectDetailPage() {
                     <Battery className="h-5 w-5 text-gray-500" />
                   </div>
                   <p className="font-bold">
-                    {((project.currentFunding + amount*2500) / project.fundingGoal) * 100}%
+                    {((project.currentFunding / project.fundingGoal) * 100).toFixed(0)}%
                   </p>
                   <p className="text-xs text-gray-500">Funded</p>
                 </div>
@@ -597,7 +550,6 @@ export default function ProjectDetailPage() {
                       type="number"
                       placeholder="0.1"
                       value={fundAmount}
-                      //update amount variable
                       onChange={(e) => setFundAmount(e.target.value)}
                     />
                   </div>
@@ -605,7 +557,6 @@ export default function ProjectDetailPage() {
                     className="w-full"
                     onClick={handleFund}
                     disabled={isLoading || !fundAmount}
-
                   >
                     {isLoading ? "Processing..." : "Fund This Project"}
                   </Button>
