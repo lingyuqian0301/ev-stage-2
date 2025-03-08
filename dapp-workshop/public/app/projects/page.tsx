@@ -8,8 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ProjectCard from "@/components/project-card";
 import { Search } from "lucide-react";
 
-// IMPORTANT: We updated these imports from your contract
-// so that we call the actual functions that exist.
+// Import the existing read functions
 import {
   getProjectCount,
   getProjectStruct,
@@ -31,10 +30,10 @@ type Project = {
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [visibleCount, setVisibleCount] = useState(3); // how many items to show in "All" tab
+  const [visibleCount, setVisibleCount] = useState(3);
   const [loading, setLoading] = useState(true);
 
-  // Sample dummy projects (prefixing "dummy-" so keys won't collide)
+  // Sample dummy projects, including one that is over-funded (110%).
   const dummyProjects: Project[] = [
     {
       id: "dummy-1",
@@ -96,12 +95,22 @@ export default function ProjectsPage() {
       daysLeft: 35,
       backers: 780,
     },
+    // Example: "Success" project that's already over 100% funded
+    {
+      id: "dummy-7",
+      title: "JetCharge Roadster",
+      description: "An electric roadster with a top speed of 200 mph",
+      image: "/placeholder.svg?height=200&width=400",
+      fundingGoal: 300000,
+      currentFunding: 330000, // 110% of the goal
+      daysLeft: 0,            // or some small number to simulate ending soon
+      backers: 2000,
+    },
   ];
 
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        // 1) read how many projects exist from your contract
         const count = await getProjectCount();
         console.log("Contract projectCount() =>", count);
 
@@ -118,20 +127,20 @@ export default function ProjectsPage() {
           const funding = await getProjectFunding(i);
           const backers = await getProjectBackers(i);
 
-          // prefix "chain-" to avoid key collision with dummy
+          // prefix "chain-" to avoid collisions
           chainProjects.push({
             id: `chain-${i}`,
             title: `Blockchain Project #${i}`,
             description: "On-chain EV Project",
             image: "/blockchain-placeholder.svg?height=200&width=400",
-            fundingGoal: Number(projectStruct.fundingGoal), // if it's Wei, you may want to convert
-            currentFunding: funding, // in ETH as a float
+            fundingGoal: Number(projectStruct.fundingGoal),
+            currentFunding: funding,
             daysLeft: 30, // placeholder
             backers,
           });
         }
 
-        // Combine dummy + chain projects
+        // Combine dummy + chain
         setProjects([...dummyProjects, ...chainProjects]);
       } catch (err) {
         console.error("Error fetching blockchain projects:", err);
@@ -157,9 +166,9 @@ export default function ProjectsPage() {
     );
   }
 
-  // how many items we have in total
+  // how many items in total
   const totalProjects = projects.length;
-  // whether to show the "Load More" button
+  // can we show "Load More"?
   const canLoadMore = visibleCount < totalProjects;
 
   return (
@@ -187,7 +196,7 @@ export default function ProjectsPage() {
         </Select>
       </div>
 
-      {/* Project Categories */}
+      {/* Tabs for categories */}
       <Tabs defaultValue="all" className="mb-8">
         <TabsList>
           <TabsTrigger value="all">All Projects</TabsTrigger>
@@ -200,9 +209,8 @@ export default function ProjectsPage() {
         {/* All Projects */}
         <TabsContent value="all" className="mt-6">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Only show up to `visibleCount` items */}
-            {projects.slice(0, visibleCount).map((project) => (
-              <ProjectCard key={project.id} project={project} />
+            {projects.slice(0, visibleCount).map((proj) => (
+              <ProjectCard key={proj.id} project={proj} />
             ))}
           </div>
         </TabsContent>
@@ -210,8 +218,8 @@ export default function ProjectsPage() {
         {/* Cars */}
         <TabsContent value="cars" className="mt-6">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.slice(0, 3).map((project) => (
-              <ProjectCard key={project.id} project={project} />
+            {projects.slice(0, 3).map((proj) => (
+              <ProjectCard key={proj.id} project={proj} />
             ))}
           </div>
         </TabsContent>
@@ -219,8 +227,8 @@ export default function ProjectsPage() {
         {/* Trucks */}
         <TabsContent value="trucks" className="mt-6">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.slice(2, 5).map((project) => (
-              <ProjectCard key={project.id} project={project} />
+            {projects.slice(2, 5).map((proj) => (
+              <ProjectCard key={proj.id} project={proj} />
             ))}
           </div>
         </TabsContent>
@@ -228,8 +236,8 @@ export default function ProjectsPage() {
         {/* Commercial */}
         <TabsContent value="commercial" className="mt-6">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.slice(5, 6).map((project) => (
-              <ProjectCard key={project.id} project={project} />
+            {projects.slice(5, 6).map((proj) => (
+              <ProjectCard key={proj.id} project={proj} />
             ))}
           </div>
         </TabsContent>
@@ -243,7 +251,7 @@ export default function ProjectsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Show/Hide "Load More" button for the "All Projects" */}
+      {/* "Load More" button for All Projects tab */}
       <div className="flex justify-center mt-8">
         {canLoadMore && (
           <Button variant="outline" onClick={handleLoadMore}>

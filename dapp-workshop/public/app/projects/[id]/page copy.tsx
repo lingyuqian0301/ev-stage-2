@@ -34,7 +34,6 @@ interface ChainProject {
   currentFunding: number;  // ETH float from getProjectFunding
   backers: number;
   active: boolean;
-  endDate: number;        // Add endDate to track project deadline
 }
 
 // For dummy voting requests with weight-based votes
@@ -67,14 +66,8 @@ export default function ProjectDetailPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-    //variable amount to store how much the user has funded
-    const [amount, setAmount] = useState(0);
-
   // store the on-chain project data
   const [chainProject, setChainProject] = useState<ChainProject | null>(null);
-
-  // Add local funding tracking
-  const [localCurrentFunding, setLocalCurrentFunding] = useState<number>(0);
 
   // Dummy "requests" array for demonstration
   const [votingRequests, setVotingRequests] = useState<VotingRequest[]>([
@@ -137,11 +130,10 @@ export default function ProjectDetailPage() {
         setChainProject({
           id: structData.id,
           owner: structData.owner,
-          fundingGoal: structData.fundingGoal,
-          currentFunding: Number(funding) * 1e18,
+          fundingGoal: Number(structData.fundingGoal),
+          currentFunding: funding,
           backers: totalBackers,
           active: structData.active,
-          endDate: structData.endDate,
         });
       } catch (error) {
         console.error("Error fetching project from chain:", error);
@@ -150,26 +142,6 @@ export default function ProjectDetailPage() {
 
     fetchChainProject();
   }, [id]);
-
-  useEffect(() => {
-    if (id.startsWith('dummy-')) {
-      // Set initial funding for dummy project
-      setLocalCurrentFunding(325000 * 1e18); // Initial dummy funding
-    } else if (chainProject) {
-      setLocalCurrentFunding(chainProject.currentFunding);
-    }
-  }, [chainProject, id]);
-
-  // Calculate days left
-  const calculateDaysLeft = () => {
-    if (!chainProject?.endDate) return 0;
-    
-    const now = Math.floor(Date.now() / 1000); // Current time in seconds
-    const timeLeft = chainProject.endDate - now;
-    const daysLeft = Math.max(0, Math.ceil(timeLeft / (24 * 60 * 60)));
-    
-    return daysLeft;
-  };
 
   // Build a "UI project" with fallback
   const project = {
@@ -180,9 +152,9 @@ export default function ProjectDetailPage() {
     longDescription:
       "The SolarDrive EV represents the next generation of sustainable transportation...",
     image: "/product_solardrive3.webp?height=200&width=400",
-    fundingGoal: chainProject ? Number(chainProject.fundingGoal) / 1e18 : 500000,
-    currentFunding: localCurrentFunding / 1e18, // Use local tracking instead
-    daysLeft: calculateDaysLeft(),
+    fundingGoal: chainProject ? chainProject.fundingGoal : 500000,
+    currentFunding: chainProject ? chainProject.currentFunding : 325000,
+    daysLeft: 15, // placeholder
     backers: chainProject ? chainProject.backers : 1240,
     team: [
       {
@@ -231,30 +203,16 @@ export default function ProjectDetailPage() {
     if (!fundAmount || isNaN(Number(fundAmount)) || Number(fundAmount) <= 0) {
       return;
     }
+    if (!chainProject) {
+      console.log("No chain project loaded; cannot fund.");
+      return;
+    }
 
     setIsLoading(true);
     try {
-      if (id.startsWith('dummy-')) {
-        // For dummy projects, we'll still use the blockchain but with ID 1
-        console.log(`Funding dummy project (using chain ID 1) with ${fundAmount} ETH`);
-        await fundProject("1", fundAmount); // Always fund project 1 for dummy projects
-        setLocalCurrentFunding(prev => prev + (Number(fundAmount) * 1e18));
-        setAmount(prev => prev + Number(fundAmount));
-        setShowSuccess(true);
-        setFundAmount("");
-        return;
-      }
-
-      // Handle regular chain project funding
-      if (!chainProject) {
-        console.log("No chain project loaded; cannot fund.");
-        return;
-      }
-
       console.log(`Funding #${chainProject.id} with ${fundAmount} ETH`);
+      // In your real code, this calls the contract. 
       await fundProject(String(chainProject.id), fundAmount);
-      setLocalCurrentFunding(prev => prev + (Number(fundAmount)* 1e18 + amount*2500));
-      setAmount(prev => prev + Number(fundAmount));
       setShowSuccess(true);
       setFundAmount("");
     } catch (error) {
@@ -504,7 +462,7 @@ export default function ProjectDetailPage() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="font-bold text-2xl">
-                    ${(project.currentFunding+amount*2500).toFixed(0)}
+                    ${(project.currentFunding / 1000).toFixed(1)}k
                   </span>
                   <span className="text-gray-500">
                     of ${(project.fundingGoal / 1000).toFixed(0)}k goal
@@ -536,7 +494,7 @@ export default function ProjectDetailPage() {
                     <Battery className="h-5 w-5 text-gray-500" />
                   </div>
                   <p className="font-bold">
-                    {((project.currentFunding + amount*2500) / project.fundingGoal) * 100}%
+                    {((project.currentFunding / project.fundingGoal) * 100).toFixed(0)}%
                   </p>
                   <p className="text-xs text-gray-500">Funded</p>
                 </div>
@@ -576,7 +534,6 @@ export default function ProjectDetailPage() {
                       type="number"
                       placeholder="0.1"
                       value={fundAmount}
-                      //update amount variable
                       onChange={(e) => setFundAmount(e.target.value)}
                     />
                   </div>
@@ -584,7 +541,6 @@ export default function ProjectDetailPage() {
                     className="w-full"
                     onClick={handleFund}
                     disabled={isLoading || !fundAmount}
-
                   >
                     {isLoading ? "Processing..." : "Fund This Project"}
                   </Button>
