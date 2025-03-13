@@ -4,252 +4,281 @@ import {
   parseEther,
   formatEther,
   createWalletClient,
-  custom
+  custom,
 } from "viem";
 import { scrollSepolia } from "viem/chains";
 
-// Extended ABI with a createProject function
+// ABI for the crowdfunding contract
 const crowdfundingABI = [
   {
-    "inputs": [
+    inputs: [],
+    name: "projectCount",
+    outputs: [
       {
-        "internalType": "uint256",
-        "name": "projectId",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
     ],
-    "name": "fundProject",
-    "outputs": [],
-    "stateMutability": "payable",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "uint256",
-        "name": "projectId",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
     ],
-    "name": "getProject",
-    "outputs": [
+    name: "projects",
+    outputs: [
       {
-        "components": [
-          {
-            "internalType": "address",
-            "name": "creator",
-            "type": "address"
-          },
-          {
-            "internalType": "string",
-            "name": "title",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "description",
-            "type": "string"
-          },
-          {
-            "internalType": "uint256",
-            "name": "fundingGoal",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "deadline",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "amountRaised",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint8",
-            "name": "status",
-            "type": "uint8"
-          }
-        ],
-        "internalType": "struct Crowdfunding.Project",
-        "name": "",
-        "type": "tuple"
-      }
+        internalType: "uint256",
+        name: "id",
+        type: "uint256",
+      },
+      {
+        internalType: "address",
+        name: "owner",
+        type: "address",
+      },
+      {
+        internalType: "uint256",
+        name: "fundingGoal",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "currentFunding",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "backers",
+        type: "uint256",
+      },
+      {
+        internalType: "bool",
+        name: "active",
+        type: "bool",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
-  // Added createProject function:
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "string",
-        "name": "title",
-        "type": "string"
+        internalType: "uint256",
+        name: "fundingGoal",
+        type: "uint256",
       },
-      {
-        "internalType": "string",
-        "name": "description",
-        "type": "string"
-      },
-      {
-        "internalType": "uint256",
-        "name": "fundingGoal",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "deadline",
-        "type": "uint256"
-      }
     ],
-    "name": "createProject",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  }
+    name: "createProject",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "uint256",
+        name: "projectId",
+        type: "uint256",
+      },
+    ],
+    name: "fundProject",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "uint256",
+        name: "projectId",
+        type: "uint256",
+      },
+    ],
+    name: "getProjectFunding",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "uint256",
+        name: "projectId",
+        type: "uint256",
+      },
+    ],
+    name: "getProjectBackers",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
 ];
 
-const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
 if (!contractAddress) {
   throw new Error("Missing NEXT_PUBLIC_CONTRACT_ADDRESS");
 }
 
-// Create public client
+// Create public client (for reading) & wallet client (for writing)
 const publicClient = createPublicClient({
   chain: scrollSepolia,
-  transport: http()
+  transport: http(),
 });
 
-// Create contract instance
-const getContract = () => {
+function getContract() {
   if (typeof window === "undefined") return null;
-
   const walletClient = createWalletClient({
     chain: scrollSepolia,
-    transport: custom(window.ethereum)
+    transport: custom(window.ethereum),
   });
-
   return {
     read: publicClient,
     write: walletClient,
     address: contractAddress as `0x${string}`,
     abi: crowdfundingABI,
   };
-};
-
-/** Fund an existing project */
-export async function fundProject(projectId: number, amount: string) {
-  try {
-    if (!window.ethereum) {
-      throw new Error("No wallet found");
-    }
-
-    const contract = getContract();
-    if (!contract) {
-      throw new Error("Failed to initialize contract");
-    }
-
-    // Get connected account
-    const [address] = await contract.write.requestAddresses();
-
-    // Validate amount format
-    const amountNum = parseFloat(amount);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      throw new Error("Invalid amount");
-    }
-
-    // Format the number
-    const formattedAmount = amountNum.toFixed(18);
-
-    // Send transaction
-    const hash = await contract.write.writeContract({
-      account: address,
-      address: contract.address,
-      abi: contract.abi,
-      functionName: "fundProject",
-      args: [BigInt(projectId)],
-      value: parseEther(formattedAmount)
-    });
-
-    // Wait for transaction
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
-    return receipt;
-  } catch (error) {
-    console.error("Fund project error:", error);
-    throw error;
-  }
 }
 
-/** Get a project by ID */
-export async function getProjectDetails(projectId: number) {
+// Read how many projects exist
+export async function getProjectCount(): Promise<number> {
   const contract = getContract();
-  if (!contract) {
-    throw new Error("Failed to initialize contract");
-  }
+  if (!contract) throw new Error("No contract instance (window.ethereum missing?)");
 
-  const project = await contract.read.readContract({
+  const count = (await contract.read.readContract({
     address: contract.address,
     abi: contract.abi,
-    functionName: "getProject",
-    args: [BigInt(projectId)]
+    functionName: "projectCount",
+    args: [],
+  })) as bigint;
+
+  return Number(count);
+}
+
+// Read the entire struct by calling `projects(i)`
+export async function getProjectStruct(projectId: number) {
+  const contract = getContract();
+  if (!contract) throw new Error("No contract instance");
+
+  const data = await contract.read.readContract({
+    address: contract.address,
+    abi: contract.abi,
+    functionName: "projects",
+    args: [BigInt(projectId)],
   });
-  return project;
+
+  const [id, owner, fundingGoal, currentFunding, backers, active] = data as [
+    bigint,
+    string,
+    bigint,
+    bigint,
+    bigint,
+    boolean
+  ];
+
+  return {
+    id: Number(id),
+    owner,
+    fundingGoal: Number(fundingGoal), // Keep in Wei
+    currentFunding: Number(currentFunding), // Keep in Wei
+    backers: Number(backers),
+    active,
+  };
 }
 
-/** For demonstration: returns project amountRaised in ETH */
+// Read single field: getProjectFunding(uint256)
 export async function getProjectFunding(projectId: number): Promise<number> {
-  const project = await getProjectDetails(projectId);
-  // Convert from wei to ETH
-  return parseFloat(formatEther(project.amountRaised));
+  const contract = getContract();
+  if (!contract) throw new Error("No contract instance");
+
+  const result = (await contract.read.readContract({
+    address: contract.address,
+    abi: contract.abi,
+    functionName: "getProjectFunding",
+    args: [BigInt(projectId)],
+  })) as bigint;
+
+  return Number(result); // Return in Wei
 }
 
-/** For demonstration: returns a placeholder backer count */
+// Read single field: getProjectBackers(uint256)
 export async function getProjectBackers(projectId: number): Promise<number> {
-  // Example placeholder
-  return 42;
+  const contract = getContract();
+  if (!contract) throw new Error("No contract instance");
+
+  const result = (await contract.read.readContract({
+    address: contract.address,
+    abi: contract.abi,
+    functionName: "getProjectBackers",
+    args: [BigInt(projectId)],
+  })) as bigint;
+
+  return Number(result);
 }
 
-/** Create a new project on the blockchain */
-export async function createProject(
-  title: string,
-  description: string,
-  fundingGoal: string,
-  deadline: string
-) {
-  try {
-    if (!window.ethereum) {
-      throw new Error("No wallet found");
-    }
-    const contract = getContract();
-    if (!contract) {
-      throw new Error("Failed to initialize contract");
-    }
+// fundProject(uint256) payable
+export async function fundProject(projectId: number, amountEth: string) {
+  if (!window.ethereum) throw new Error("No wallet found");
+  const contract = getContract();
+  if (!contract) throw new Error("No contract instance");
 
-    // Convert fundingGoal to WEI if your contract expects wei
-    // If your contract expects raw integer for e.g. stablecoins or other units, adjust accordingly
-    const fundingGoalWei = parseEther(fundingGoal);
+  const [account] = await contract.write.requestAddresses();
+  const amountWei = parseEther(amountEth);
 
-    // The "deadline" might be a Unix timestamp or block height, or even days from now—adjust as needed:
-    const deadlineValue = BigInt(deadline);
+  const hash = await contract.write.writeContract({
+    account,
+    address: contract.address,
+    abi: contract.abi,
+    functionName: "fundProject",
+    args: [BigInt(projectId)],
+    value: amountWei,
+  });
 
-    // Get connected account
-    const [address] = await contract.write.requestAddresses();
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  return receipt;
+}
 
-    // Write transaction
-    const hash = await contract.write.writeContract({
-      account: address,
-      address: contract.address,
-      abi: contract.abi,
-      functionName: "createProject",
-      args: [title, description, fundingGoalWei, deadlineValue]
-    });
+// createProject(uint256 fundingGoal)
+export async function createProject(fundingGoalEth: string) {
+  if (!window.ethereum) throw new Error("No wallet found");
+  const contract = getContract();
+  if (!contract) throw new Error("No contract instance");
 
-    // Wait for transaction to be mined
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
-    return receipt;
-  } catch (error) {
-    console.error("Create project error:", error);
-    throw error;
-  }
+  const [account] = await contract.write.requestAddresses();
+  const fundingGoalWei = parseEther(fundingGoalEth);
+
+  const hash = await contract.write.writeContract({
+    account,
+    address: contract.address,
+    abi: contract.abi,
+    functionName: "createProject",
+    args: [fundingGoalWei],
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  return receipt;
 }
